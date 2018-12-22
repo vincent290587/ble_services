@@ -17,7 +17,6 @@ NRF_LOG_MODULE_REGISTER();
 #define TX_BUFFER_SIZE         (TX_BUFFER_MASK + 1)  /**< Size of send buffer, which is 1 higher than the mask. */
 
 #define WRITE_MESSAGE_LENGTH   BLE_CCCD_VALUE_LEN    /**< Length of the write message for CCCD. */
-#define WRITE_MESSAGE_LENGTH   BLE_CCCD_VALUE_LEN    /**< Length of the write message for CCCD. */
 
 typedef enum
 {
@@ -97,7 +96,7 @@ static void tx_buffer_process(void)
 
 /**@brief     Function for handling write response events.
  *
- * @param[in] p_ble_lns_c Pointer to the Heart Rate Client structure.
+ * @param[in] p_ble_lns_c Pointer to the Client structure.
  * @param[in] p_ble_evt   Pointer to the BLE event received.
  */
 static void on_write_rsp(ble_lns_c_t * p_ble_lns_c, const ble_evt_t * p_ble_evt)
@@ -107,6 +106,7 @@ static void on_write_rsp(ble_lns_c_t * p_ble_lns_c, const ble_evt_t * p_ble_evt)
 	{
 		return;
 	}
+
 	// Check if there is any message to be sent across to the peer and send it.
 	tx_buffer_process();
 }
@@ -220,6 +220,8 @@ static void on_disconnected(ble_lns_c_t * p_ble_lns_c, const ble_evt_t * p_ble_e
 		p_ble_lns_c->conn_handle                 = BLE_CONN_HANDLE_INVALID;
 		p_ble_lns_c->peer_lns_db.lns_cccd_handle = BLE_GATT_HANDLE_INVALID;
 		p_ble_lns_c->peer_lns_db.lns_handle      = BLE_GATT_HANDLE_INVALID;
+
+		m_tx_insert_index = m_tx_index;
 	}
 }
 
@@ -323,6 +325,7 @@ void ble_lns_c_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
 		break;
 
 	default:
+		tx_buffer_process();
 		break;
 	}
 }
@@ -342,7 +345,7 @@ void ble_lns_c_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
 	 m_tx_insert_index &= TX_BUFFER_MASK;
 
 	 p_msg->req.write_req.gattc_params.handle   = handle_cccd;
-	 p_msg->req.write_req.gattc_params.len      = WRITE_MESSAGE_LENGTH;
+         p_msg->req.write_req.gattc_params.len      = sizeof(cccd_val);
 	 p_msg->req.write_req.gattc_params.p_value  = p_msg->req.write_req.gattc_value;
 	 p_msg->req.write_req.gattc_params.offset   = 0;
 	 p_msg->req.write_req.gattc_params.write_op = BLE_GATT_OP_WRITE_REQ;
