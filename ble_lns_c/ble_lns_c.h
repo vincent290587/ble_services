@@ -37,6 +37,8 @@
 #include <stdint.h>
 #include "ble.h"
 #include "ble_db_discovery.h"
+#include "ble_srv_common.h"
+#include "nrf_ble_gq.h"
 #include "sdk_config.h"
 #include "app_util_bds.h"
 
@@ -157,6 +159,9 @@ struct ble_lns_c_s
     uint16_t                conn_handle;      /**< Connection handle as provided by the SoftDevice. */
     lns_db_t                peer_lns_db;      /**< Handles related to LNS on the peer*/
     ble_lns_c_evt_handler_t evt_handler;      /**< Application event handler to be called when there is an event related to the heart rate service. */
+    ble_srv_error_handler_t   error_handler;  /**< Function to be called in case of an error. */
+    nrf_ble_gq_t            * p_gatt_queue;   /**< Pointer to BLE GATT Queue instance. */
+
 };
 
 /**@brief Heart Rate Client initialization structure.
@@ -164,6 +169,8 @@ struct ble_lns_c_s
 typedef struct
 {
     ble_lns_c_evt_handler_t evt_handler;  /**< Event handler to be called by the Client module whenever there is an event related to the Heart Rate Service. */
+    ble_srv_error_handler_t   error_handler;  /**< Function to be called in case of an error. */
+    nrf_ble_gq_t            * p_gatt_queue;   /**< Pointer to BLE GATT Queue instance. */
 } ble_lns_c_init_t;
 
 /** @} */

@@ -10,98 +10,29 @@
 #include "ble_srv_common.h"
 #include "ble_gattc.h"
 
-#define NRF_LOG_MODULE_NAME ble_komoot_c
-#include "nrf_log.h"
-NRF_LOG_MODULE_REGISTER();
-
-#define TX_BUFFER_MASK         0x07                  /**< TX Buffer mask, must be a mask of continuous zeroes, followed by continuous sequence of ones: 000...111. */
-#define TX_BUFFER_SIZE         (TX_BUFFER_MASK + 1)  /**< Size of send buffer, which is 1 higher than the mask. */
+#include "segger_wrapper.h"
 
 #define WRITE_MESSAGE_LENGTH   BLE_CCCD_VALUE_LEN    /**< Length of the write message for CCCD. */
 
-typedef enum
-{
-	READ_REQ,  /**< Type identifying that this tx_message is a read request. */
-	WRITE_REQ  /**< Type identifying that this tx_message is a write request. */
-} tx_request_t;
 
-/**@brief Structure for writing a message to the peer, i.e. CCCD.
- */
-typedef struct
-{
-	uint8_t                  gattc_value[WRITE_MESSAGE_LENGTH];  /**< The message to write. */
-	ble_gattc_write_params_t gattc_params;                       /**< GATTC parameters for this message. */
-} write_params_t;
-
-/**@brief Structure for holding data to be transmitted to the connected central.
- */
-typedef struct
-{
-	uint16_t     conn_handle;  /**< Connection handle to be used when transmitting this message. */
-	tx_request_t type;         /**< Type of this message, i.e. read or write message. */
-	union
-	{
-		uint16_t       read_handle;  /**< Read request message. */
-		write_params_t write_req;    /**< Write request message. */
-	} req;
-} tx_message_t;
-
-
-static tx_message_t  m_tx_buffer[TX_BUFFER_SIZE];  /**< Transmit buffer for messages to be transmitted to the central. */
-static uint32_t      m_tx_insert_index = 0;        /**< Current index in the transmit buffer where the next message should be inserted. */
-static uint32_t      m_tx_index = 0;               /**< Current index in the transmit buffer from where the next message to be transmitted resides. */
-
-
-/**@brief Function for passing any pending request from the buffer to the stack.
- */
-static void tx_buffer_process(void)
-{
-	if (m_tx_index != m_tx_insert_index)
-	{
-		uint32_t err_code;
-
-		if (m_tx_buffer[m_tx_index].type == READ_REQ)
-		{
-			err_code = sd_ble_gattc_read(m_tx_buffer[m_tx_index].conn_handle,
-					m_tx_buffer[m_tx_index].req.read_handle, 0);
-		}
-		else
-		{
-			err_code = sd_ble_gattc_write(m_tx_buffer[m_tx_index].conn_handle,
-					&m_tx_buffer[m_tx_index].req.write_req.gattc_params);
-		}
-		if (err_code == NRF_SUCCESS)
-		{
-			LOG_DEBUG("SD Read/Write (%u) API returns Success..\r\n",
-					m_tx_buffer[m_tx_index].type);
-			m_tx_index++;
-			m_tx_index &= TX_BUFFER_MASK;
-		}
-		else
-		{
-			LOG_INFO("SD Read/Write (%u) API returns error. This message sending will be "
-					"attempted again..\r\n",
-					m_tx_buffer[m_tx_index].type);
-		}
-	}
-}
-
-
-/**@brief     Function for handling write response events.
+/**@brief Function for intercepting the errors of GATTC and the BLE GATT Queue.
  *
- * @param[in] p_ble_komoot_c Pointer to the Client structure.
- * @param[in] p_ble_evt   Pointer to the BLE event received.
+ * @param[in] nrf_error   Error code.
+ * @param[in] p_ctx       Parameter from the event handler.
+ * @param[in] conn_handle Connection handle.
  */
-static void on_write_rsp(ble_komoot_c_t * p_ble_komoot_c, const ble_evt_t * p_ble_evt)
+static void gatt_error_handler(uint32_t   nrf_error,
+		void     * p_ctx,
+		uint16_t   conn_handle)
 {
-	// Check if the event on the link is for this instance
-	if (p_ble_komoot_c->conn_handle != p_ble_evt->evt.gattc_evt.conn_handle)
-	{
-		return;
-	}
+	ble_komoot_c_t * p_ble_komoot_c = (ble_komoot_c_t *)p_ctx;
 
-	// Check if there is any message to be sent across to the peer and send it.
-	tx_buffer_process();
+	NRF_LOG_DEBUG("A GATT Client error has occurred on conn_handle: 0X%X", conn_handle);
+
+	if (p_ble_komoot_c->error_handler != NULL)
+	{
+		p_ble_komoot_c->error_handler(nrf_error);
+	}
 }
 
 /**@brief     Function for handling write response events.
@@ -213,8 +144,6 @@ static void on_disconnected(ble_komoot_c_t * p_ble_komoot_c, const ble_evt_t * p
 		p_ble_komoot_c->conn_handle                 = BLE_CONN_HANDLE_INVALID;
 		p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle = BLE_GATT_HANDLE_INVALID;
 		p_ble_komoot_c->peer_komoot_db.komoot_handle      = BLE_GATT_HANDLE_INVALID;
-
-		m_tx_insert_index = m_tx_index;
 	}
 }
 
@@ -235,40 +164,40 @@ void ble_komoot_c_on_db_disc_evt(ble_komoot_c_t * p_ble_komoot_c, const ble_db_d
 		evt.conn_handle = p_evt->conn_handle;
 		evt.evt_type    = BLE_KOMOOT_C_EVT_DISCOVERY_FAILED;
 
-			evt.evt_type    = BLE_KOMOOT_C_EVT_DISCOVERY_COMPLETE;
+		evt.evt_type    = BLE_KOMOOT_C_EVT_DISCOVERY_COMPLETE;
 
-			LOG_INFO("Database Discovery complete: %u CHAR found\r\n",
-					p_evt->params.discovered_db.char_count);
+		LOG_INFO("Database Discovery complete: %u CHAR found\r\n",
+				p_evt->params.discovered_db.char_count);
 
-			for (i = 0; i < p_evt->params.discovered_db.char_count; i++)
-			{
+		for (i = 0; i < p_evt->params.discovered_db.char_count; i++)
+		{
 
-				LOG_INFO("Discovered CHAR: 0x%04X\r\n", p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid);
+			LOG_INFO("Discovered CHAR: 0x%04X\r\n", p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid);
 
-				if (p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid ==
-						BLE_UUID_KOMOOT_CHAR) {
+			if (p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid ==
+					BLE_UUID_KOMOOT_CHAR) {
 
-					// Found KOMOOT characteristic. Store CCCD handle and break.
-					evt.params.peer_db.komoot_cccd_handle =
-							p_evt->params.discovered_db.charateristics[i].cccd_handle;
-					evt.params.peer_db.komoot_handle =
-							p_evt->params.discovered_db.charateristics[i].characteristic.handle_value;
+				// Found KOMOOT characteristic. Store CCCD handle and break.
+				evt.params.peer_db.komoot_cccd_handle =
+						p_evt->params.discovered_db.charateristics[i].cccd_handle;
+				evt.params.peer_db.komoot_handle =
+						p_evt->params.discovered_db.charateristics[i].characteristic.handle_value;
 
-					LOG_INFO("Storing CCCD handle.\r\n");
-				}
-
+				LOG_INFO("Storing CCCD handle.\r\n");
 			}
 
-			LOG_INFO("KOMOOT Service discovered at peer.\r\n");
-			//If the instance has been assigned prior to db_discovery, assign the db_handles
-			if (p_ble_komoot_c->conn_handle != BLE_CONN_HANDLE_INVALID)
+		}
+
+		LOG_INFO("KOMOOT Service discovered at peer.\r\n");
+		//If the instance has been assigned prior to db_discovery, assign the db_handles
+		if (p_ble_komoot_c->conn_handle != BLE_CONN_HANDLE_INVALID)
+		{
+			if ((p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle == BLE_GATT_HANDLE_INVALID)&&
+					(p_ble_komoot_c->peer_komoot_db.komoot_handle == BLE_GATT_HANDLE_INVALID))
 			{
-				if ((p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle == BLE_GATT_HANDLE_INVALID)&&
-						(p_ble_komoot_c->peer_komoot_db.komoot_handle == BLE_GATT_HANDLE_INVALID))
-				{
-					p_ble_komoot_c->peer_komoot_db = evt.params.peer_db;
-				}
+				p_ble_komoot_c->peer_komoot_db = evt.params.peer_db;
 			}
+		}
 
 		p_ble_komoot_c->evt_handler(p_ble_komoot_c, &evt);
 	}
@@ -279,6 +208,7 @@ uint32_t ble_komoot_c_init(ble_komoot_c_t * p_ble_komoot_c, ble_komoot_c_init_t 
 {
 	VERIFY_PARAM_NOT_NULL(p_ble_komoot_c);
 	VERIFY_PARAM_NOT_NULL(p_ble_komoot_c_init);
+	VERIFY_PARAM_NOT_NULL(p_ble_komoot_c_init->p_gatt_queue);
 
 	ble_uuid_t komoot_uuid;
 	ble_uuid128_t base_uuid_service = {BLE_BASE_UUID_KOMOOT_SERVICE};
@@ -291,8 +221,10 @@ uint32_t ble_komoot_c_init(ble_komoot_c_t * p_ble_komoot_c, ble_komoot_c_init_t 
 	komoot_uuid.uuid = BLE_UUID_KOMOOT_SERVICE;
 	komoot_uuid.type = p_ble_komoot_c->uuid_type;
 
-	p_ble_komoot_c->evt_handler                 = p_ble_komoot_c_init->evt_handler;
 	p_ble_komoot_c->conn_handle                 = BLE_CONN_HANDLE_INVALID;
+	p_ble_komoot_c->evt_handler                 = p_ble_komoot_c_init->evt_handler;
+	p_ble_komoot_c->error_handler               = p_ble_komoot_c_init->error_handler;
+	p_ble_komoot_c->p_gatt_queue                = p_ble_komoot_c_init->p_gatt_queue;
 	p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle = BLE_GATT_HANDLE_INVALID;
 	p_ble_komoot_c->peer_komoot_db.komoot_handle      = BLE_GATT_HANDLE_INVALID;
 
@@ -309,14 +241,17 @@ void ble_komoot_c_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
 		return;
 	}
 
+	if ( (p_ble_komoot_c->conn_handle == BLE_CONN_HANDLE_INVALID)
+			||(p_ble_komoot_c->conn_handle != p_ble_evt->evt.gap_evt.conn_handle)
+	)
+	{
+		return;
+	}
+
 	switch (p_ble_evt->header.evt_id)
 	{
 	case BLE_GATTC_EVT_HVX:
 		on_hvx(p_ble_komoot_c, p_ble_evt);
-		break;
-
-	case BLE_GATTC_EVT_WRITE_RSP:
-		on_write_rsp(p_ble_komoot_c, p_ble_evt);
 		break;
 
 	case BLE_GATTC_EVT_READ_RSP:
@@ -328,73 +263,74 @@ void ble_komoot_c_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)
 		break;
 
 	default:
-		tx_buffer_process();
 		break;
 	}
 }
 
-
 /**@brief Function for creating a message for writing to the CCCD.
  */
-static uint32_t cccd_configure(uint16_t conn_handle, uint16_t handle_cccd, bool enable)
+static uint32_t cccd_configure(ble_komoot_c_t * p_ble_komoot_c, bool notification_enable)
 {
-    NRF_LOG_INFO("Configuring CCCD. CCCD Handle = %d, Connection Handle = %d\r\n",
-        handle_cccd,conn_handle);
+	NRF_LOG_DEBUG("Configuring CCCD. CCCD Handle = %d, Connection Handle = %d",
+			p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle,
+			p_ble_komoot_c->conn_handle);
 
-    tx_message_t * p_msg;
-    uint16_t       cccd_val = enable ? BLE_GATT_HVX_NOTIFICATION : 0;
+	nrf_ble_gq_req_t cccd_req;
+	uint8_t          cccd[BLE_CCCD_VALUE_LEN];
+	uint16_t         cccd_val = notification_enable ? BLE_GATT_HVX_NOTIFICATION : 0;
 
-    p_msg              = &m_tx_buffer[m_tx_insert_index++];
-    m_tx_insert_index &= TX_BUFFER_MASK;
+	memset(&cccd_req, 0, sizeof(nrf_ble_gq_req_t));
 
-    p_msg->req.write_req.gattc_params.handle   = handle_cccd;
-    p_msg->req.write_req.gattc_params.len      = sizeof(cccd_val);
-    p_msg->req.write_req.gattc_params.p_value  = p_msg->req.write_req.gattc_value;
-    p_msg->req.write_req.gattc_params.offset   = 0;
-    p_msg->req.write_req.gattc_params.write_op = BLE_GATT_OP_WRITE_REQ;
-    p_msg->req.write_req.gattc_value[0]        = LSB_16(cccd_val);
-    p_msg->req.write_req.gattc_value[1]        = MSB_16(cccd_val);
-    p_msg->conn_handle                         = conn_handle;
-    p_msg->type                                = WRITE_REQ;
+	cccd[0] = LSB_16(cccd_val);
+	cccd[1] = MSB_16(cccd_val);
 
-    tx_buffer_process();
-    return NRF_SUCCESS;
+	cccd_req.type                        = NRF_BLE_GQ_REQ_GATTC_WRITE;
+	cccd_req.error_handler.cb            = gatt_error_handler;
+	cccd_req.error_handler.p_ctx         = p_ble_komoot_c;
+	cccd_req.params.gattc_write.handle   = p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle;
+	cccd_req.params.gattc_write.len      = BLE_CCCD_VALUE_LEN;
+	cccd_req.params.gattc_write.offset   = 0;
+	cccd_req.params.gattc_write.p_value  = cccd;
+	cccd_req.params.gattc_write.write_op = BLE_GATT_OP_WRITE_REQ;
+	//	 cccd_req.params.gattc_write.flags    = BLE_GATT_EXEC_WRITE_FLAG_PREPARED_WRITE;
+
+	return nrf_ble_gq_item_add(p_ble_komoot_c->p_gatt_queue, &cccd_req, p_ble_komoot_c->conn_handle);
 }
 
 uint32_t ble_komoot_c_nav_read(ble_komoot_c_t * p_ble_komoot_c)
 {
-    VERIFY_PARAM_NOT_NULL(p_ble_komoot_c);
-    if (p_ble_komoot_c->conn_handle == BLE_CONN_HANDLE_INVALID)
-    {
-        return NRF_ERROR_INVALID_STATE;
-    }
+	VERIFY_PARAM_NOT_NULL(p_ble_komoot_c);
 
-    tx_message_t * msg;
+	nrf_ble_gq_req_t write_req;
 
-    msg                  = &m_tx_buffer[m_tx_insert_index++];
-    m_tx_insert_index   &= TX_BUFFER_MASK;
+	memset(&write_req, 0, sizeof(nrf_ble_gq_req_t));
 
-    msg->req.read_handle = p_ble_komoot_c->peer_komoot_db.komoot_handle;
-    msg->conn_handle     = p_ble_komoot_c->conn_handle;
-    msg->type            = READ_REQ;
+	if (p_ble_komoot_c->conn_handle == BLE_CONN_HANDLE_INVALID)
+	{
+		return NRF_ERROR_INVALID_STATE;
+	}
 
-    tx_buffer_process();
-    return NRF_SUCCESS;
+	write_req.type                        = NRF_BLE_GQ_REQ_GATTC_READ;
+	write_req.error_handler.cb            = gatt_error_handler;
+	write_req.error_handler.p_ctx         = p_ble_komoot_c;
+	write_req.params.gattc_read.handle    = p_ble_komoot_c->peer_komoot_db.komoot_handle;
+	write_req.params.gattc_read.offset    = 0;
+
+	return nrf_ble_gq_item_add(p_ble_komoot_c->p_gatt_queue, &write_req, p_ble_komoot_c->conn_handle);
 }
 
 uint32_t ble_komoot_c_pos_notif_enable(ble_komoot_c_t * p_ble_komoot_c)
 {
 	VERIFY_PARAM_NOT_NULL(p_ble_komoot_c);
 
-    if ( (p_ble_komoot_c->conn_handle == BLE_CONN_HANDLE_INVALID)
-       ||(p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle == BLE_GATT_HANDLE_INVALID)
-       )
-    {
-        return NRF_ERROR_INVALID_STATE;
-    }
-	return cccd_configure(p_ble_komoot_c->conn_handle, p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle, true);
+	if ( (p_ble_komoot_c->conn_handle == BLE_CONN_HANDLE_INVALID)
+			||(p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle == BLE_GATT_HANDLE_INVALID)
+	)
+	{
+		return NRF_ERROR_INVALID_STATE;
+	}
+	return cccd_configure(p_ble_komoot_c, true);
 }
-
 
 uint32_t ble_komoot_c_handles_assign(ble_komoot_c_t * p_ble_komoot_c,
 		uint16_t conn_handle,
@@ -405,10 +341,11 @@ uint32_t ble_komoot_c_handles_assign(ble_komoot_c_t * p_ble_komoot_c,
 	p_ble_komoot_c->conn_handle = conn_handle;
 	if (p_peer_komoot_handles != NULL)
 	{
-		 p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle = p_peer_komoot_handles->komoot_cccd_handle;
-		 p_ble_komoot_c->peer_komoot_db.komoot_handle = p_peer_komoot_handles->komoot_handle;
+		p_ble_komoot_c->peer_komoot_db.komoot_cccd_handle = p_peer_komoot_handles->komoot_cccd_handle;
+		p_ble_komoot_c->peer_komoot_db.komoot_handle = p_peer_komoot_handles->komoot_handle;
 	}
-	return NRF_SUCCESS;
+
+	return nrf_ble_gq_conn_handle_register(p_ble_komoot_c->p_gatt_queue, conn_handle);
 }
 /** @}
  *  @endcond
