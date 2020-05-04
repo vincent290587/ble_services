@@ -37,7 +37,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#include "../ble_cp_c/ble_cp_c.h"
+#include "ble_cp_c.h"
 
 #include "sdk_common.h"
 
@@ -48,10 +48,8 @@
 #include "ble_gattc.h"
 #include "ble_date_time.h"
 #include "ble_db_discovery.h"
-#define NRF_LOG_MODULE_NAME ble_cp_c
-#include "nrf_log.h"
-#include "nrf_log_ctrl.h"
-NRF_LOG_MODULE_REGISTER();
+
+#include "segger_wrapper.h"
 
 _Static_assert(sizeof(cycling_power_vector_flags_t) == 1, "cycling_power_vector_flags_t wrong size");
 _Static_assert(sizeof(cycling_power_meas_flags_t) == 2  , "cycling_power_meas_flags_t wrong size");

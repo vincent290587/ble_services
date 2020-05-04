@@ -39,7 +39,6 @@
 #include "ble_srv_common.h"
 #include "ble_gattc.h"
 #include "ble.h"
-#include "ble_date_time.h"
 #include "ble_db_discovery.h"
 #include "nrf_ble_gq.h"
 #include "nrf_sdh_ble.h"
