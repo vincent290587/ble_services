@@ -10,7 +10,9 @@
 #include "ble_srv_common.h"
 #include "ble_gattc.h"
 
-#include "segger_wrapper.h"
+#define NRF_LOG_MODULE_NAME ble_komoot_c
+#include "nrf_log.h"
+NRF_LOG_MODULE_REGISTER();
 
 #define WRITE_MESSAGE_LENGTH   BLE_CCCD_VALUE_LEN    /**< Length of the write message for CCCD. */
 
@@ -55,12 +57,8 @@ static void on_read_rsp(ble_komoot_c_t * p_ble_komoot_c, const ble_evt_t * p_ble
 
 	if (p_ble_evt->evt.gattc_evt.gatt_status == BLE_GATT_STATUS_SUCCESS)
 	{
-		LOG_INFO("on_read_rsp len: %u", p_response->len);
-
-		LOG_DEBUG("Read RSP: ");
-		for (int i=0; i < p_response->len; i++) {
-			LOG_DEBUG("0x%02X ", p_response->data[i]);
-		}
+		NRF_LOG_INFO("on_read_rsp len: %u", p_response->len);
+		NRF_LOG_HEXDUMP_DEBUG(p_response->data, p_response->len);
 
 		if (err_code == NRF_SUCCESS)
 		{
@@ -99,11 +97,11 @@ static void on_hvx(ble_komoot_c_t * p_ble_komoot_c, const ble_evt_t * p_ble_evt)
 	// Check if the event is on the link for this instance
 	if (p_ble_komoot_c->conn_handle != p_ble_evt->evt.gattc_evt.conn_handle)
 	{
-		LOG_DEBUG("received HVX on link 0x%x, not associated to this instance, ignore\r\n",
+		NRF_LOG_DEBUG("received HVX on link 0x%x, not associated to this instance, ignore\r\n",
 				p_ble_evt->evt.gattc_evt.conn_handle);
 		return;
 	}
-	LOG_DEBUG("received HVX on handle 0x%x, komoot_handle 0x%x\r\n",
+	NRF_LOG_DEBUG("received HVX on handle 0x%x, komoot_handle 0x%x\r\n",
 			p_ble_evt->evt.gattc_evt.params.hvx.handle,
 			p_ble_komoot_c->peer_komoot_db.komoot_handle);
 
@@ -115,10 +113,8 @@ static void on_hvx(ble_komoot_c_t * p_ble_komoot_c, const ble_evt_t * p_ble_evt)
 		ble_komoot_c_evt.evt_type                    = BLE_KOMOOT_C_EVT_KOMOOT_NOTIFICATION;
 		ble_komoot_c_evt.conn_handle                 = p_ble_komoot_c->conn_handle;
 
-		LOG_DEBUG("Read HVX: ");
-		for (int i=0; i < p_ble_evt->evt.gattc_evt.params.hvx.len; i++) {
-			LOG_DEBUG("0x%02X ", p_ble_evt->evt.gattc_evt.params.hvx.data[i]);
-		}
+		NRF_LOG_DEBUG("Read HVX: ");
+		NRF_LOG_HEXDUMP_DEBUG(p_ble_evt->evt.gattc_evt.params.hvx.data, p_ble_evt->evt.gattc_evt.params.hvx.len);
 
 		if (p_ble_evt->evt.gattc_evt.params.hvx.len == 4) {
 			p_ble_komoot_c->evt_handler(p_ble_komoot_c, &ble_komoot_c_evt);
@@ -166,13 +162,13 @@ void ble_komoot_c_on_db_disc_evt(ble_komoot_c_t * p_ble_komoot_c, const ble_db_d
 
 		evt.evt_type    = BLE_KOMOOT_C_EVT_DISCOVERY_COMPLETE;
 
-		LOG_INFO("Database Discovery complete: %u CHAR found\r\n",
+		NRF_LOG_INFO("Database Discovery complete: %u CHAR found\r\n",
 				p_evt->params.discovered_db.char_count);
 
 		for (i = 0; i < p_evt->params.discovered_db.char_count; i++)
 		{
 
-			LOG_INFO("Discovered CHAR: 0x%04X\r\n", p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid);
+			NRF_LOG_INFO("Discovered CHAR: 0x%04X\r\n", p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid);
 
 			if (p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid ==
 					BLE_UUID_KOMOOT_CHAR) {
@@ -183,12 +179,12 @@ void ble_komoot_c_on_db_disc_evt(ble_komoot_c_t * p_ble_komoot_c, const ble_db_d
 				evt.params.peer_db.komoot_handle =
 						p_evt->params.discovered_db.charateristics[i].characteristic.handle_value;
 
-				LOG_INFO("Storing CCCD handle.\r\n");
+				NRF_LOG_INFO("Storing CCCD handle.\r\n");
 			}
 
 		}
 
-		LOG_INFO("KOMOOT Service discovered at peer.\r\n");
+		NRF_LOG_INFO("KOMOOT Service discovered at peer.\r\n");
 		//If the instance has been assigned prior to db_discovery, assign the db_handles
 		if (p_ble_komoot_c->conn_handle != BLE_CONN_HANDLE_INVALID)
 		{

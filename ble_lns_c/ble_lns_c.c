@@ -9,7 +9,9 @@
 #include "ble_srv_common.h"
 #include "ble_gattc.h"
 
-#include "segger_wrapper.h"
+#define NRF_LOG_MODULE_NAME ble_lns_c
+#include "nrf_log.h"
+NRF_LOG_MODULE_REGISTER();
 
 #define WRITE_MESSAGE_LENGTH   BLE_CCCD_VALUE_LEN    /**< Length of the write message for CCCD. */
 
@@ -168,12 +170,12 @@ void ble_lns_c_on_db_disc_evt(ble_lns_c_t * p_ble_lns_c, const ble_db_discovery_
 		uint32_t i;
 		ble_lns_c_evt_t evt;
 
-		LOG_INFO("Database Discovery handler called with event 0x%x\r\n", p_evt->evt_type);
+		NRF_LOG_INFO("Database Discovery handler called with event 0x%x\r\n", p_evt->evt_type);
 
 		evt.conn_handle = p_evt->conn_handle;
 		evt.evt_type = BLE_LNS_C_EVT_DISCOVERY_COMPLETE;
 
-		LOG_INFO("Database Discovery complete\r\n");
+		NRF_LOG_INFO("Database Discovery complete\r\n");
 
 		for (i = 0; i < p_evt->params.discovered_db.char_count; i++)
 		{
@@ -188,11 +190,11 @@ void ble_lns_c_on_db_disc_evt(ble_lns_c_t * p_ble_lns_c, const ble_db_discovery_
 						p_evt->params.discovered_db.charateristics[i].characteristic.handle_value;
 			}
 
-			LOG_INFO("Discovered LNS CHAR: 0x%X\r\n", p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid);
+			NRF_LOG_INFO("Discovered LNS CHAR: 0x%X\r\n", p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid);
 			//NRF_LOG_FLUSH();
 		}
 
-		LOG_INFO("LNS Service discovered at peer.\r\n");
+		NRF_LOG_INFO("LNS Service discovered at peer.\r\n");
 		//If the instance has been assigned prior to db_discovery, assign the db_handles
 		if (p_ble_lns_c->conn_handle != BLE_CONN_HANDLE_INVALID)
 		{

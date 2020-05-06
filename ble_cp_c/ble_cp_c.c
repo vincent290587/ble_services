@@ -49,7 +49,9 @@
 #include "ble_date_time.h"
 #include "ble_db_discovery.h"
 
-#include "segger_wrapper.h"
+#define NRF_LOG_MODULE_NAME ble_cp_c
+#include "nrf_log.h"
+NRF_LOG_MODULE_REGISTER();
 
 _Static_assert(sizeof(cycling_power_vector_flags_t) == 1, "cycling_power_vector_flags_t wrong size");
 _Static_assert(sizeof(cycling_power_meas_flags_t) == 2  , "cycling_power_meas_flags_t wrong size");
@@ -135,7 +137,6 @@ void ble_cp_c_on_db_disc_evt(ble_cp_c_t * p_cp, ble_db_discovery_evt_t * p_evt)
 		}
 
 		NRF_LOG_INFO("CP discovered at peer.");
-		NRF_LOG_FLUSH();
 
 		//If the instance has been assigned prior to db_discovery, assign the db_handles.
 		if (p_cp->conn_handle != BLE_CONN_HANDLE_INVALID)
@@ -203,7 +204,7 @@ static uint32_t power_vector_decode(cycling_power_vector_char_t * p_pow_vec,
 		uint8_t const       * p_data,
 		uint32_t const        length)
 {
-	NRF_LOG_HEXDUMP_INFO(p_data, length);
+	NRF_LOG_HEXDUMP_DEBUG(p_data, length);
 
 	// indicate the evt
 	p_evt->evt_type = BLE_CP_C_EVT_VECTOR_UPDATED;
@@ -262,7 +263,7 @@ static uint32_t power_measure_decode(cycling_power_meas_char_t * p_pow_meas,
 		uint8_t const       * p_data,
 		uint32_t const        length)
 {
-	NRF_LOG_HEXDUMP_INFO(p_data, length);
+	NRF_LOG_HEXDUMP_DEBUG(p_data, length);
 
 	uint16_t index = 0;
 
