@@ -162,7 +162,7 @@ void ble_lns_c_on_db_disc_evt(ble_lns_c_t * p_ble_lns_c, const ble_db_discovery_
 	// Check if the Rate Service was discovered.
 	if ((p_evt->evt_type == BLE_DB_DISCOVERY_COMPLETE) &&
 			p_evt->params.discovered_db.srv_uuid.uuid == BLE_UUID_LOCATION_AND_NAVIGATION_SERVICE &&
-			p_evt->params.discovered_db.srv_uuid.type == p_ble_lns_c->uuid_type)
+			p_evt->params.discovered_db.srv_uuid.type == BLE_UUID_TYPE_BLE)
 	{
 		// Find the CCCD Handle of the Heart Rate Measurement characteristic.
 		uint32_t i;
@@ -171,16 +171,13 @@ void ble_lns_c_on_db_disc_evt(ble_lns_c_t * p_ble_lns_c, const ble_db_discovery_
 		LOG_INFO("Database Discovery handler called with event 0x%x\r\n", p_evt->evt_type);
 
 		evt.conn_handle = p_evt->conn_handle;
-		evt.evt_type    = BLE_LNS_C_EVT_DISCOVERY_FAILED;
-
-		evt.evt_type    = BLE_LNS_C_EVT_DISCOVERY_COMPLETE;
+		evt.evt_type = BLE_LNS_C_EVT_DISCOVERY_COMPLETE;
 
 		LOG_INFO("Database Discovery complete\r\n");
 
 		for (i = 0; i < p_evt->params.discovered_db.char_count; i++)
 		{
 
-			// TODO check CHAR
 			if (p_evt->params.discovered_db.charateristics[i].characteristic.uuid.uuid ==
 					BLE_UUID_LN_LOCATION_AND_SPEED_CHAR)
 			{

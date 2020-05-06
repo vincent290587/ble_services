@@ -316,12 +316,8 @@ static uint32_t power_measure_decode(cycling_power_meas_char_t * p_pow_meas,
  */
 static void on_disconnect(ble_cp_c_t * p_cp, ble_evt_t const * p_ble_evt)
 {
-	if (p_cp->conn_handle == p_ble_evt->evt.gap_evt.conn_handle)
-	{
-		p_cp->conn_handle = BLE_CONN_HANDLE_INVALID;
-	}
 
-	if (ble_cp_c_is_discovered(p_cp))
+	if (p_cp->conn_handle == p_ble_evt->evt.gap_evt.conn_handle)
 	{
 		// There was a valid instance of CTS on the peer. Send an event to the
 		// application, so that it can do any clean up related to this module.
@@ -330,6 +326,9 @@ static void on_disconnect(ble_cp_c_t * p_cp, ble_evt_t const * p_ble_evt)
 		evt.evt_type = BLE_CP_C_EVT_DISCONN_COMPLETE;
 
 		p_cp->evt_handler(p_cp, &evt);
+
+		p_cp->conn_handle = BLE_CONN_HANDLE_INVALID;
+
 		p_cp->char_handles.vec_handle      = BLE_GATT_HANDLE_INVALID;
 		p_cp->char_handles.vec_cccd_handle = BLE_GATT_HANDLE_INVALID;
 
